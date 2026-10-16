@@ -1,0 +1,169 @@
+<?xml version="1.0" encoding="utf-8"?>
+<RelativeLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="#FFFFFF">
+
+    <!-- 1. En-tête : Photo de profil + Barre de recherche -->
+    <LinearLayout
+        android:id="@+id/layoutHeader"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_alignParentTop="true"
+        android:orientation="horizontal"
+        android:gravity="center_vertical"
+        android:padding="16dp">
+
+        <!-- Le conteneur rond pour la photo de profil -->
+        <androidx.cardview.widget.CardView
+            android:layout_width="50dp"
+            android:layout_height="50dp"
+            android:layout_marginEnd="12dp"
+            app:cardCornerRadius="25dp"
+            app:cardElevation="0dp"
+            app:cardBackgroundColor="#E0E0E0">
+
+            <ImageView
+                android:id="@+id/imgProfile"
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
+                android:scaleType="centerCrop"
+                android:src="@android:drawable/ic_menu_camera" />
+        </androidx.cardview.widget.CardView>
+
+        <!-- La Barre de Recherche -->
+        <androidx.appcompat.widget.SearchView
+            android:id="@+id/searchBar"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:background="#F0F0F0"
+            app:iconifiedByDefault="false"
+            app:queryBackground="@android:color/transparent"
+            app:queryHint="Rechercher une musique..." />
+    </LinearLayout>
+
+    <!-- 2. Les 3 Onglets de navigation -->
+    <LinearLayout
+        android:id="@+id/layoutTabs"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_below="@id/layoutHeader"
+        android:orientation="horizontal"
+        android:paddingHorizontal="16dp"
+        android:paddingBottom="12dp">
+
+        <TextView
+            android:id="@+id/tabBibliotheque"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:text="Bibliothèque"
+            android:textAlignment="center"
+            android:textStyle="bold"
+            android:textColor="#000000"
+            android:padding="8dp" />
+
+        <TextView
+            android:id="@+id/tabFolders"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:text="Folders"
+            android:textAlignment="center"
+            android:textColor="#888888"
+            android:padding="8dp" />
+
+        <TextView
+            android:id="@+id/tabLiked"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:text="Liked"
+            android:textAlignment="center"
+            android:textColor="#888888"
+            android:padding="8dp" />
+    </LinearLayout>
+
+    <!-- 3. Espace central (La liste interactive des MP3) -->
+    <ListView
+        android:id="@+id/listViewMusics"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:layout_above="@id/layoutMiniLecteur"
+        android:layout_below="@id/layoutTabs"
+        android:layout_marginHorizontal="16dp"
+        android:divider="#E0E0E0"
+        android:dividerHeight="1dp" />
+
+    <!-- 4. Le Mini-Lecteur Ergonomique en bas de l'écran -->
+    <!-- Il est ancré en bas grâce à layout_alignParentBottom="true" -->
+    <LinearLayout
+        android:id="@+id/layoutMiniLecteur"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_alignParentBottom="true"
+        android:background="#F8F8F8"
+        android:elevation="16dp"
+        android:orientation="vertical"
+        android:paddingTop="12dp"
+        android:paddingBottom="24dp">
+
+        <!-- Le Bouton Like (Rond) -->
+        <androidx.cardview.widget.CardView
+            android:id="@+id/btnLikeCard"
+            android:layout_width="40dp"
+            android:layout_height="40dp"
+            android:layout_gravity="center_horizontal"
+            android:layout_marginBottom="16dp"
+            app:cardBackgroundColor="#E0E0E0"
+            app:cardCornerRadius="20dp"
+            app:cardElevation="2dp">
+
+            <!-- On utilise l'icône étoile native pour symboliser le favori -->
+            <ImageView
+                android:id="@+id/iconLike"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_gravity="center"
+                android:src="@android:drawable/btn_star_big_off" />
+        </androidx.cardview.widget.CardView>
+
+        <!-- Les Contrôles de lecture -->
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:gravity="center">
+
+            <!-- Bouton Précédent -->
+            <ImageButton
+                android:id="@+id/btnPrev"
+                android:layout_width="56dp"
+                android:layout_height="56dp"
+                android:layout_marginEnd="32dp"
+                android:background="?attr/selectableItemBackgroundBorderless"
+                android:src="@android:drawable/ic_media_previous" />
+
+            <!-- Bouton central Play / Pause -->
+            <ImageButton
+                android:id="@+id/btnPlayPause"
+                android:layout_width="72dp"
+                android:layout_height="72dp"
+                android:background="?attr/selectableItemBackgroundBorderless"
+                android:scaleType="fitCenter"
+                android:src="@android:drawable/ic_media_play" />
+
+            <!-- Bouton Suivant -->
+            <ImageButton
+                android:id="@+id/btnNext"
+                android:layout_width="56dp"
+                android:layout_height="56dp"
+                android:layout_marginStart="32dp"
+                android:background="?attr/selectableItemBackgroundBorderless"
+                android:src="@android:drawable/ic_media_next" />
+        </LinearLayout>
+    </LinearLayout>
+
+</RelativeLayout>
