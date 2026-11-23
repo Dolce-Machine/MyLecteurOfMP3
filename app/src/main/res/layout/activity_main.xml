@@ -99,71 +99,144 @@
 
     <!-- 4. Le Mini-Lecteur Ergonomique en bas de l'écran -->
     <!-- Il est ancré en bas grâce à layout_alignParentBottom="true" -->
+    <!-- 4. Le Mini-Lecteur Ergonomique en bas de l'écran -->
     <LinearLayout
-        android:id="@+id/layoutMiniLecteur"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:layout_alignParentBottom="true"
-        android:background="#F8F8F8"
-        android:elevation="16dp"
-        android:orientation="vertical"
-        android:paddingTop="12dp"
-        android:paddingBottom="24dp">
-
-        <!-- Le Bouton Like (Rond) -->
-        <androidx.cardview.widget.CardView
-            android:id="@+id/btnLikeCard"
-            android:layout_width="40dp"
-            android:layout_height="40dp"
-            android:layout_gravity="center_horizontal"
-            android:layout_marginBottom="16dp"
-            app:cardBackgroundColor="#E0E0E0"
-            app:cardCornerRadius="20dp"
-            app:cardElevation="2dp">
-
-            <!-- On utilise l'icône étoile native pour symboliser le favori -->
-            <ImageView
-                android:id="@+id/iconLike"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:layout_gravity="center"
-                android:src="@android:drawable/btn_star_big_off" />
-        </androidx.cardview.widget.CardView>
-
-        <!-- Les Contrôles de lecture -->
-        <LinearLayout
+            android:id="@+id/layoutMiniLecteur"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:orientation="horizontal"
-            android:gravity="center">
+            android:layout_alignParentBottom="true"
+            android:background="#F8F8F8"
+            android:elevation="16dp"
+            android:orientation="vertical"
+            android:paddingTop="12dp"
+            android:paddingBottom="24dp">
 
-            <!-- Bouton Précédent -->
-            <ImageButton
-                android:id="@+id/btnPrev"
-                android:layout_width="56dp"
-                android:layout_height="56dp"
-                android:layout_marginEnd="32dp"
-                android:background="?attr/selectableItemBackgroundBorderless"
-                android:src="@android:drawable/ic_media_previous" />
+            <!-- Ligne 1 : Titre + Bouton Like -->
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal"
+                android:gravity="center_vertical"
+                android:paddingHorizontal="16dp"
+                android:layout_marginBottom="8dp">
 
-            <!-- Bouton central Play / Pause -->
-            <ImageButton
-                android:id="@+id/btnPlayPause"
-                android:layout_width="72dp"
-                android:layout_height="72dp"
-                android:background="?attr/selectableItemBackgroundBorderless"
-                android:scaleType="fitCenter"
-                android:src="@android:drawable/ic_media_play" />
+                <TextView
+                    android:id="@+id/txtTitreActuel"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:text="Aucune musique"
+                    android:textSize="15sp"
+                    android:textStyle="bold"
+                    android:textColor="#000000"
+                    android:singleLine="true"
+                    android:ellipsize="end"
+                    android:layout_marginEnd="12dp" />
 
-            <!-- Bouton Suivant -->
-            <ImageButton
-                android:id="@+id/btnNext"
-                android:layout_width="56dp"
-                android:layout_height="56dp"
-                android:layout_marginStart="32dp"
-                android:background="?attr/selectableItemBackgroundBorderless"
-                android:src="@android:drawable/ic_media_next" />
-        </LinearLayout>
+                <androidx.cardview.widget.CardView
+                    android:id="@+id/btnLikeCard"
+                    android:layout_width="40dp"
+                    android:layout_height="40dp"
+                    app:cardBackgroundColor="#E0E0E0"
+                    app:cardCornerRadius="20dp"
+                    app:cardElevation="2dp">
+
+                    <ImageView
+                        android:id="@+id/iconLike"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_gravity="center"
+                        android:src="@android:drawable/btn_star_big_off" />
+                </androidx.cardview.widget.CardView>
+            </LinearLayout>
+
+            <!-- Ligne 2 : Temps écoulé + SeekBar + Durée totale -->
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal"
+                android:gravity="center_vertical"
+                android:paddingHorizontal="12dp"
+                android:layout_marginBottom="8dp">
+
+                <TextView
+                    android:id="@+id/txtTempsEcoule"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="00:00"
+                    android:textSize="12sp"
+                    android:textColor="#666666" />
+
+                <SeekBar
+                    android:id="@+id/seekBar"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:layout_marginHorizontal="6dp" />
+
+                <TextView
+                    android:id="@+id/txtDureeTotale"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="00:00"
+                    android:textSize="12sp"
+                    android:textColor="#666666" />
+            </LinearLayout>
+
+            <!-- Ligne 3 : Les 5 Contrôles de lecture bien répartis -->
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal"
+                android:gravity="center"
+                android:paddingHorizontal="16dp">
+
+                <ImageButton
+                    android:id="@+id/btnShuffle"
+                    android:layout_width="40dp"
+                    android:layout_height="40dp"
+                    android:layout_marginEnd="16dp"
+                    android:background="?attr/selectableItemBackgroundBorderless"
+                    android:contentDescription="Lecture aléatoire"
+                    android:src="@android:drawable/ic_menu_sort_by_size"
+                    app:tint="#888888" />
+
+                <ImageButton
+                    android:id="@+id/btnPrev"
+                    android:layout_width="48dp"
+                    android:layout_height="48dp"
+                    android:layout_marginEnd="16dp"
+                    android:background="?attr/selectableItemBackgroundBorderless"
+                    android:src="@android:drawable/ic_media_previous" />
+
+                <ImageButton
+                    android:id="@+id/btnPlayPause"
+                    android:layout_width="64dp"
+                    android:layout_height="64dp"
+                    android:background="?attr/selectableItemBackgroundBorderless"
+                    android:scaleType="fitCenter"
+                    android:src="@android:drawable/ic_media_play" />
+
+                <ImageButton
+                    android:id="@+id/btnNext"
+                    android:layout_width="48dp"
+                    android:layout_height="48dp"
+                    android:layout_marginStart="16dp"
+                    android:background="?attr/selectableItemBackgroundBorderless"
+                    android:src="@android:drawable/ic_media_next" />
+
+                <ImageButton
+                    android:id="@+id/btnDelete"
+                    android:layout_width="40dp"
+                    android:layout_height="40dp"
+                    android:layout_marginStart="16dp"
+                    android:background="?attr/selectableItemBackgroundBorderless"
+                    android:contentDescription="Supprimer la musique"
+                    android:src="@android:drawable/ic_menu_delete"
+                    app:tint="#D32F2F" />
+            </LinearLayout>
+
+
     </LinearLayout>
 
 </RelativeLayout>

@@ -5,33 +5,48 @@ import android.content.ComponentName;
 import android.content.Context;
 import android.content.Intent;
 import android.content.ServiceConnection;
+import android.content.SharedPreferences;
 import android.content.pm.PackageManager;
 import android.database.Cursor;
 import android.os.Build;
 import android.os.Bundle;
+import android.os.Handler;
 import android.os.IBinder;
+import android.os.Looper;
 import android.provider.MediaStore;
 import android.widget.ArrayAdapter;
 import android.widget.ImageButton;
 import android.widget.ImageView;
 import android.widget.ListView;
+import android.widget.SeekBar;
 import android.widget.TextView;
 import android.widget.Toast;
-
+import java.util.Locale;
 import androidx.annotation.NonNull;
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.appcompat.widget.SearchView;
+import androidx.cardview.widget.CardView;
 import androidx.core.app.ActivityCompat;
 import androidx.core.content.ContextCompat;
-
+import android.app.PendingIntent;
+import android.content.ContentUris;
+import android.net.Uri;
+import androidx.activity.result.ActivityResultLauncher;
+import androidx.activity.result.IntentSenderRequest;
+import androidx.activity.result.contract.ActivityResultContracts;
+import java.util.Collections;
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
 
 public class MainActivity extends AppCompatActivity {
 
     private static final int PERMISSION_REQUEST_CODE = 1;
+    private static final String PREFS_NAME = "MyLecteurMP3Prefs";
+    private static final String KEY_FAVORIS = "musiques_favorites";
 
-    // --- Variables pour la connexion au MusicService ---
+    // --- Connexion au MusicService ---
     private MusicService musicService;
     private boolean isBound = false;
 
@@ -42,8 +57,8 @@ public class MainActivity extends AppCompatActivity {
             musicService = binder.getService();
             isBound = true;
 
-            // On donne la liste au service dès la connexion
             musicService.setPlaylist(musiquesFiltrees);
+            synchroniserUI();
         }
 
         @Override
@@ -55,10 +70,12 @@ public class MainActivity extends AppCompatActivity {
     public static class Musique {
         public String titre;
         public String cheminFichier;
+        public Uri uri;
 
-        public Musique(String titre, String cheminFichier) {
+        public Musique(String titre, String cheminFichier, Uri uri) {
             this.titre = titre;
             this.cheminFichier = cheminFichier;
+            this.uri = uri;
         }
 
         @Override
@@ -67,13 +84,41 @@ public class MainActivity extends AppCompatActivity {
         }
     }
 
-    private boolean isLiked = false;
-    private ImageButton btnPlayPause;
+    private Set<String> favorisPaths = new HashSet<>();
+    private boolean modeFavoris = false;
+    private String rechercheActuelle = "";
+
+    private CardView btnLikeCard;
+    private ImageButton btnPlayPause; private ImageButton btnShuffle;
     private ArrayAdapter<Musique> adapter;
     private List<Musique> toutesLesMusiques;
     private List<Musique> musiquesFiltrees;
 
     private TextView tabBibliotheque, tabFolders, tabLiked;
+    private TextView txtTitreActuel; private TextView txtTempsEcoule, txtDureeTotale;
+    private SeekBar seekBar;
+    private boolean isUserSeeking = false;
+
+    private final Handler handler = new Handler(Looper.getMainLooper());
+    private final Runnable updateProgressRunnable = new Runnable() {
+        @Override
+        public void run() {
+            if (isBound && musicService != null) {
+                if (!isUserSeeking && seekBar != null) {
+                    int duree = musicService.getDuration();
+                    int position = musicService.getCurrentPosition();
+                    if (duree > 0) {
+                        seekBar.setMax(duree);
+                        seekBar.setProgress(position);
+                        if (txtTempsEcoule != null) txtTempsEcoule.setText(formaterTemps(position));
+                        if (txtDureeTotale != null) txtDureeTotale.setText(formaterTemps(duree));
+                    }
+                }
+                synchroniserUI();
+            }
+            handler.postDelayed(this, 500);
+        }
+    };
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -83,32 +128,67 @@ public class MainActivity extends AppCompatActivity {
         toutesLesMusiques = new ArrayList<>();
         musiquesFiltrees = new ArrayList<>();
 
-        ImageView imgProfile = findViewById(R.id.imgProfile);
-        imgProfile.setOnClickListener(v -> {
-            Toast.makeText(this, "Changer de photo de profil (Bientôt disponible)", Toast.LENGTH_SHORT).show();
-        });
+        // 1. Charger les favoris sauvegardés dès le démarrage
+        chargerFavoris();
 
+        ImageView imgProfile = findViewById(R.id.imgProfile);
+        imgProfile.setOnClickListener(v ->
+                Toast.makeText(this, "Changer de photo de profil (Bientôt disponible)", Toast.LENGTH_SHORT).show()
+        );
+        btnShuffle = findViewById(R.id.btnShuffle);
+
+        btnShuffle.setOnClickListener(v -> {
+            if (isBound && musicService != null) {
+                musicService.toggleShuffle();
+                synchroniserUI();
+            }
+        });
+        ImageButton btnDelete = findViewById(R.id.btnDelete);
+        btnDelete.setOnClickListener(v -> {
+            if (isBound && musicService != null && musicService.getMusiqueActuelle() != null) {
+                demanderSuppression(musicService.getMusiqueActuelle());
+            } else {
+                Toast.makeText(this, "Aucune musique en cours", Toast.LENGTH_SHORT).show();
+            }
+        });
+        // 2. Onglets
         tabBibliotheque = findViewById(R.id.tabBibliotheque);
         tabFolders = findViewById(R.id.tabFolders);
         tabLiked = findViewById(R.id.tabLiked);
 
-        tabBibliotheque.setOnClickListener(v -> activerOnglet(tabBibliotheque));
-        tabFolders.setOnClickListener(v -> activerOnglet(tabFolders));
-        tabLiked.setOnClickListener(v -> activerOnglet(tabLiked));
+        tabBibliotheque.setOnClickListener(v -> {
+            activerOnglet(tabBibliotheque);
+            modeFavoris = false;
+            appliquerFiltres();
+        });
 
+        tabFolders.setOnClickListener(v -> {
+            activerOnglet(tabFolders);
+            Toast.makeText(this, "Vue Dossiers à brancher", Toast.LENGTH_SHORT).show();
+        });
+
+        tabLiked.setOnClickListener(v -> {
+            activerOnglet(tabLiked);
+            modeFavoris = true;
+            appliquerFiltres();
+        });
+
+        activerOnglet(tabBibliotheque);
+
+        // 3. Liste des musiques
         ListView listView = findViewById(R.id.listViewMusics);
         adapter = new ArrayAdapter<>(this, android.R.layout.simple_list_item_1, musiquesFiltrees);
         listView.setAdapter(adapter);
 
-        // --- Clic sur une musique de la liste ---
         listView.setOnItemClickListener((parent, view, position, id) -> {
             if (isBound && musicService != null) {
-                // On délègue totalement la gestion de l'index au Service
+                musicService.setPlaylist(musiquesFiltrees);
                 musicService.jouerMusiqueALindex(position);
-                btnPlayPause.setImageResource(android.R.drawable.ic_media_pause);
+                synchroniserUI();
             }
         });
 
+        // 4. Barre de recherche
         SearchView searchView = findViewById(R.id.searchBar);
         searchView.setOnQueryTextListener(new SearchView.OnQueryTextListener() {
             @Override
@@ -116,66 +196,98 @@ public class MainActivity extends AppCompatActivity {
 
             @Override
             public boolean onQueryTextChange(String newText) {
-                filtrerMusiques(newText);
+                rechercheActuelle = newText != null ? newText : "";
+                appliquerFiltres();
                 return true;
             }
         });
 
+        // 5. Titre en cours, SeekBar et contrôles de lecture
+        txtTitreActuel = findViewById(R.id.txtTitreActuel);
+        seekBar = findViewById(R.id.seekBar);
+        txtTempsEcoule = findViewById(R.id.txtTempsEcoule);
+        txtDureeTotale = findViewById(R.id.txtDureeTotale);
         btnPlayPause = findViewById(R.id.btnPlayPause);
         ImageButton btnPrev = findViewById(R.id.btnPrev);
         ImageButton btnNext = findViewById(R.id.btnNext);
-        androidx.cardview.widget.CardView btnLikeCard = findViewById(R.id.btnLikeCard);
+        btnLikeCard = findViewById(R.id.btnLikeCard);
 
-        // --- Bouton Play/Pause ---
-        btnPlayPause.setOnClickListener(v -> {
-            if (isBound && musicService != null) {
-                if (musicService.isPlaying()) {
-                    musicService.pause();
-                    btnPlayPause.setImageResource(android.R.drawable.ic_media_play);
-                } else {
-                    // S'il n'y a pas de musique en cours, on lance la première par défaut
-                    // S'il y en a une (en pause), resume() la relancera.
-                    if (musicService.getCurrentPosition() == 0 && !musiquesFiltrees.isEmpty()) {
-                        musicService.jouerMusiqueALindex(0);
-                    } else {
-                        musicService.resume();
-                    }
-                    btnPlayPause.setImageResource(android.R.drawable.ic_media_pause);
+        seekBar.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener() {
+
+            @Override
+            public void onProgressChanged(SeekBar seekBar, int progress, boolean fromUser) {
+                if (fromUser && txtTempsEcoule != null) {
+                    txtTempsEcoule.setText(formaterTemps(progress));
+                }
+            }
+
+            @Override
+            public void onStartTrackingTouch(SeekBar seekBar) {
+                isUserSeeking = true;
+            }
+
+            @Override
+            public void onStopTrackingTouch(SeekBar seekBar) {
+                isUserSeeking = false;
+                if (isBound && musicService != null) {
+                    musicService.seekTo(seekBar.getProgress());
                 }
             }
         });
 
-        // --- Bouton Précédent ---
+        btnPlayPause.setOnClickListener(v -> {
+            if (isBound && musicService != null) {
+                if (musicService.isPlaying()) {
+                    musicService.pause();
+                } else {
+                    if (musicService.getMusiqueActuelle() == null && !musiquesFiltrees.isEmpty()) {
+                        musicService.setPlaylist(musiquesFiltrees);
+                        musicService.jouerMusiqueALindex(0);
+                    } else {
+                        musicService.resume();
+                    }
+                }
+                synchroniserUI();
+            }
+        });
+
         btnPrev.setOnClickListener(v -> {
             if (isBound && musicService != null) {
-                // Le service gère seul la logique des 3 secondes et du changement d'index
                 musicService.precedent();
-                btnPlayPause.setImageResource(android.R.drawable.ic_media_pause);
+                synchroniserUI();
             }
         });
 
-        // --- Bouton Suivant ---
         btnNext.setOnClickListener(v -> {
             if (isBound && musicService != null) {
-                // Le service gère seul le changement d'index
                 musicService.suivant();
-                btnPlayPause.setImageResource(android.R.drawable.ic_media_pause);
+                synchroniserUI();
             }
         });
 
+        // 6. Bouton Favoris connecté aux SharedPreferences
         btnLikeCard.setOnClickListener(v -> {
-            isLiked = !isLiked;
-            if (isLiked) {
-                btnLikeCard.setCardBackgroundColor(0xFF2196F3);
+            if (isBound && musicService != null && musicService.getMusiqueActuelle() != null) {
+                String cheminActuel = musicService.getMusiqueActuelle().cheminFichier;
+                if (favorisPaths.contains(cheminActuel)) {
+                    favorisPaths.remove(cheminActuel);
+                } else {
+                    favorisPaths.add(cheminActuel);
+                }
+                sauvegarderFavoris();
+                mettreAJourCouleurLike();
+
+                if (modeFavoris) {
+                    appliquerFiltres();
+                }
             } else {
-                btnLikeCard.setCardBackgroundColor(0xFFE0E0E0);
+                Toast.makeText(this, "Lance une musique d'abord", Toast.LENGTH_SHORT).show();
             }
         });
 
         verifierPermissionsEtCharger();
     }
 
-    // --- Cycle de vie pour lier et délier le Service ---
     @Override
     protected void onStart() {
         super.onStart();
@@ -185,12 +297,45 @@ public class MainActivity extends AppCompatActivity {
     }
 
     @Override
+    protected void onResume() {
+        super.onResume();
+        synchroniserUI();
+        handler.post(updateProgressRunnable);
+    }
+
+    @Override
+    protected void onPause() {
+        super.onPause();
+        handler.removeCallbacks(updateProgressRunnable);
+    }
+
+    @Override
     protected void onDestroy() {
         super.onDestroy();
         if (isBound) {
             unbindService(connection);
             isBound = false;
         }
+    }
+
+    // --- Synchronisation UI (Play/Pause + Titre + Like) ---
+    private void synchroniserUI() {
+        if (isBound && musicService != null) {
+            if (btnShuffle != null) {
+                int couleurShuffle = musicService.isShuffle() ? 0xFF2196F3 : 0xFF888888;
+                btnShuffle.setColorFilter(couleurShuffle);
+            }
+
+            btnPlayPause.setImageResource(
+                    musicService.isPlaying() ? android.R.drawable.ic_media_pause : android.R.drawable.ic_media_play
+            );
+
+            if (txtTitreActuel != null) {
+                Musique actuelle = musicService.getMusiqueActuelle();
+                txtTitreActuel.setText(actuelle != null ? actuelle.titre : "Aucune musique");
+            }
+        }
+        mettreAJourCouleurLike();
     }
 
     private void activerOnglet(TextView ongletActif) {
@@ -208,7 +353,11 @@ public class MainActivity extends AppCompatActivity {
 
     private void chargerMusiquesDuTelephone() {
         toutesLesMusiques.clear();
-        String[] projection = { MediaStore.Audio.Media.TITLE, MediaStore.Audio.Media.DATA };
+        String[] projection = {
+                MediaStore.Audio.Media._ID,
+                MediaStore.Audio.Media.TITLE,
+                MediaStore.Audio.Media.DATA
+        };
         String selection = MediaStore.Audio.Media.IS_MUSIC + " != 0";
         String ordreTri = MediaStore.Audio.Media.DATE_ADDED + " DESC";
 
@@ -218,53 +367,156 @@ public class MainActivity extends AppCompatActivity {
         );
 
         if (cursor != null) {
+            int indexId = cursor.getColumnIndexOrThrow(MediaStore.Audio.Media._ID);
             int indexTitre = cursor.getColumnIndexOrThrow(MediaStore.Audio.Media.TITLE);
             int indexChemin = cursor.getColumnIndexOrThrow(MediaStore.Audio.Media.DATA);
 
             while (cursor.moveToNext()) {
-                toutesLesMusiques.add(new Musique(cursor.getString(indexTitre), cursor.getString(indexChemin)));
+                long id = cursor.getLong(indexId);
+                Uri contentUri = ContentUris.withAppendedId(MediaStore.Audio.Media.EXTERNAL_CONTENT_URI, id);
+                toutesLesMusiques.add(new Musique(cursor.getString(indexTitre), cursor.getString(indexChemin), contentUri));
             }
             cursor.close();
         }
 
-        musiquesFiltrees.clear();
-        musiquesFiltrees.addAll(toutesLesMusiques);
-        adapter.notifyDataSetChanged();
+        appliquerFiltres();
+    }
+    private Musique musiqueASupprimer = null;
+
+    private final ActivityResultLauncher<IntentSenderRequest> deleteLauncher =
+            registerForActivityResult(new ActivityResultContracts.StartIntentSenderForResult(), result -> {
+                if (result.getResultCode() == RESULT_OK) {
+                    if (musiqueASupprimer != null) {
+                        favorisPaths.remove(musiqueASupprimer.cheminFichier);
+                        sauvegarderFavoris();
+                        if (isBound && musicService != null) {
+                            musicService.arreterSiActuelle(musiqueASupprimer.cheminFichier);
+                        }
+                        musiqueASupprimer = null;
+                    }
+                    Toast.makeText(this, "Musique supprimée définitivement", Toast.LENGTH_SHORT).show();
+                    chargerMusiquesDuTelephone();
+                    synchroniserUI();
+                } else {
+                    musiqueASupprimer = null;
+                    Toast.makeText(this, "Suppression annulée", Toast.LENGTH_SHORT).show();
+                }
+            });
+    private void demanderSuppression(Musique musique) {
+        if (musique == null || musique.uri == null) return;
+        musiqueASupprimer = musique;
+
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+            PendingIntent pendingIntent = MediaStore.createDeleteRequest(
+                    getContentResolver(),
+                    Collections.singletonList(musique.uri)
+            );
+            IntentSenderRequest request = new IntentSenderRequest.Builder(pendingIntent.getIntentSender()).build();
+            deleteLauncher.launch(request);
+        } else {
+            int deleted = getContentResolver().delete(musique.uri, null, null);
+            if (deleted > 0) {
+                favorisPaths.remove(musique.cheminFichier);
+                sauvegarderFavoris();
+                if (isBound && musicService != null) {
+                    musicService.arreterSiActuelle(musique.cheminFichier);
+                }
+                Toast.makeText(this, "Musique supprimée définitivement", Toast.LENGTH_SHORT).show();
+                chargerMusiquesDuTelephone();
+                synchroniserUI();
+            }
+            musiqueASupprimer = null;
+        }
     }
 
+    // --- Permissions Audio + Notifications (Pixel 8 / Android 13+) ---
     private void verifierPermissionsEtCharger() {
-        String permissionRequise = Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU ?
-                Manifest.permission.READ_MEDIA_AUDIO : Manifest.permission.READ_EXTERNAL_STORAGE;
+        List<String> permissionsADemander = new ArrayList<>();
 
-        if (ContextCompat.checkSelfPermission(this, permissionRequise) == PackageManager.PERMISSION_GRANTED) {
+        String permAudio = Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU
+                ? Manifest.permission.READ_MEDIA_AUDIO
+                : Manifest.permission.READ_EXTERNAL_STORAGE;
+
+        if (ContextCompat.checkSelfPermission(this, permAudio) != PackageManager.PERMISSION_GRANTED) {
+            permissionsADemander.add(permAudio);
+        }
+
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            if (ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) {
+                permissionsADemander.add(Manifest.permission.POST_NOTIFICATIONS);
+            }
+        }
+
+        if (permissionsADemander.isEmpty()) {
             chargerMusiquesDuTelephone();
         } else {
-            ActivityCompat.requestPermissions(this, new String[]{permissionRequise}, PERMISSION_REQUEST_CODE);
+            ActivityCompat.requestPermissions(this, permissionsADemander.toArray(new String[0]), PERMISSION_REQUEST_CODE);
         }
     }
 
     @Override
     public void onRequestPermissionsResult(int requestCode, @NonNull String[] permissions, @NonNull int[] grantResults) {
         super.onRequestPermissionsResult(requestCode, permissions, grantResults);
-        if (requestCode == PERMISSION_REQUEST_CODE && grantResults.length > 0 && grantResults[0] == PackageManager.PERMISSION_GRANTED) {
-            chargerMusiquesDuTelephone();
+        if (requestCode == PERMISSION_REQUEST_CODE) {
+            String permAudio = Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU
+                    ? Manifest.permission.READ_MEDIA_AUDIO
+                    : Manifest.permission.READ_EXTERNAL_STORAGE;
+
+            if (ContextCompat.checkSelfPermission(this, permAudio) == PackageManager.PERMISSION_GRANTED) {
+                chargerMusiquesDuTelephone();
+            }
         }
     }
 
-    private void filtrerMusiques(String requete) {
+    // --- Filtrage combiné : Onglet (Tous / Favoris) + Recherche ---
+    private void appliquerFiltres() {
         musiquesFiltrees.clear();
-        String requeteNettoyee = nettoyerTexte(requete);
+        String requeteNettoyee = nettoyerTexte(rechercheActuelle);
+
         for (Musique musique : toutesLesMusiques) {
-            if (nettoyerTexte(musique.titre).contains(requeteNettoyee)) {
+            boolean matchFavori = !modeFavoris || favorisPaths.contains(musique.cheminFichier);
+            boolean matchRecherche = requeteNettoyee.isEmpty() || nettoyerTexte(musique.titre).contains(requeteNettoyee);
+
+            if (matchFavori && matchRecherche) {
                 musiquesFiltrees.add(musique);
             }
         }
+
         adapter.notifyDataSetChanged();
         if (isBound && musicService != null) {
             musicService.setPlaylist(musiquesFiltrees);
         }
     }
 
+    private void chargerFavoris() {
+        SharedPreferences prefs = getSharedPreferences(PREFS_NAME, MODE_PRIVATE);
+        Set<String> saved = prefs.getStringSet(KEY_FAVORIS, new HashSet<>());
+        favorisPaths = new HashSet<>(saved);
+    }
+
+    private void sauvegarderFavoris() {
+        SharedPreferences prefs = getSharedPreferences(PREFS_NAME, MODE_PRIVATE);
+        prefs.edit().putStringSet(KEY_FAVORIS, new HashSet<>(favorisPaths)).apply();
+    }
+
+    private void mettreAJourCouleurLike() {
+        if (btnLikeCard == null) return;
+
+        if (isBound && musicService != null && musicService.getMusiqueActuelle() != null) {
+            String cheminActuel = musicService.getMusiqueActuelle().cheminFichier;
+            if (favorisPaths.contains(cheminActuel)) {
+                btnLikeCard.setCardBackgroundColor(0xFF2196F3); // Liké (Bleu)
+                return;
+            }
+        }
+        btnLikeCard.setCardBackgroundColor(0xFFE0E0E0); // Non liké (Gris)
+    }
+    private String formaterTemps(int millisecondes) {
+        int totalSecondes = millisecondes / 1000;
+        int minutes = totalSecondes / 60;
+        int secondes = totalSecondes % 60;
+        return String.format(Locale.getDefault(), "%02d:%02d", minutes, secondes);
+    }
     private String nettoyerTexte(String texte) {
         if (texte == null) return "";
         return texte.toLowerCase().replaceAll("[^a-z0-9\\p{L}]", "");
